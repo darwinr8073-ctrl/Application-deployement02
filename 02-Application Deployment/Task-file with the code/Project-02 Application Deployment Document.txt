@@ -1,0 +1,266 @@
+PHASE 1: Application Setup
+--------------------------
+1️.Clone the React Application
+git clone https://github.com/Vennilavan12/Trend.git
+cd Trend
+2️.Run Locally
+npm install
+npm start
+
+Check if it runs on http://localhost:3000.
+
+Confirm the app works before dockerizing.
+
+PHASE 2: Dockerize the React App
+----------------------------------
+3️.Create Dockerfile
+# Stage 1 - Build React App
+FROM node:18-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+
+# Stage 2 - Serve Production Build
+FROM nginx:alpine
+COPY --from=build /app/build /usr/share/nginx/html
+EXPOSE 3000
+CMD ["nginx", "-g", "daemon off;"]
+-------------------------------------------
+4️.Add .dockerignore
+--------------------
+node_modules
+.git
+.gitignore
+Dockerfile
+5️.Build Docker Image
+----------------------
+docker build -t trend-app .
+6️.Run Docker Container
+-------------------------
+docker run -d -p 3000:80 trend-app
+
+Open http://localhost:3000 to confirm it works.
+
+PHASE 3: Push Docker Image to DockerHub
+========================================
+7️.Create DockerHub Repo
+--------------------------
+
+Go to DockerHub
+
+Create repository: trend-app
+================================
+
+8️.Login & Push
+-------------------
+docker login
+docker tag trend-app yourdockerhubusername/trend-app:latest
+docker push yourdockerhubusername/trend-app:latest
+PHASE 4: Terraform Infrastructure
+=======================================
+9️.Setup Terraform
+-----------------------
+Create folder:
+
+mkdir terraform && cd terraform
+touch main.tf
+=================
+10.Example main.tf
+provider "aws" {
+  region = "ap-south-1"
+}
+
+# VPC
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+# Security group for EC2/Jenkins
+resource "aws_security_group" "jenkins_sg" {
+  vpc_id = aws_vpc.main.id
+}
+
+# EC2 for Jenkins
+resource "aws_instance" "jenkins" {
+  ami           = "ami-xxxxxxxx"
+  instance_type = "t2.medium"
+  security_groups = [aws_security_group.jenkins_sg.name]
+  key_name      = "your-keypair"
+}
+======================================
+11️.Initialize Terraform
+------------------------
+terraform init
+terraform plan
+terraform apply
+
+EC2 instance will be created for Jenkins.
+
+PHASE 5: Jenkins Installation
+
+SSH into EC2:
+
+ssh -i your-key.pem ec2-user@<EC2-IP>
+sudo yum update -y
+sudo yum install java-17-openjdk -y
+
+Install Jenkins:
+
+wget -O /etc/yum.repos.d/jenkins.repo https://pkg.jenkins.io/redhat-stable/jenkins.repo
+rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io.key
+sudo yum install jenkins -y
+sudo systemctl start jenkins
+sudo systemctl enable jenkins
+
+Access Jenkins: http://<EC2-IP>:8080
+============================================
+PHASE 6: Setup AWS EKS Cluster
+---------------------------------
+12️.Install eksctl & kubectl
+------------------------------
+curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /usr/local/bin
+13️.Create EKS Cluster
+--------------------------
+eksctl create cluster \
+--name trend-cluster \
+--region ap-south-1 \
+--node-type t3.medium \
+--nodes 2
+
+Verify:
+
+kubectl get nodes
+PHASE 7: Kubernetes Deployment
+============================
+14️.Create deployment.yaml
+---------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trend-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: trend-app
+  template:
+    metadata:
+      labels:
+        app: trend-app
+    spec:
+      containers:
+      - name: trend-app
+        image: yourdockerhubusername/trend-app:latest
+        ports:
+        - containerPort: 80
+=================================
+15️.Create service.yaml
+------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: trend-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: trend-app
+  ports:
+    - port: 80
+      targetPort: 80
+=========================
+16️.Deploy
+-------------------
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+kubectl get svc
+
+Copy the LoadBalancer URL for testing.
+===========================
+
+PHASE 8: Git Version Control
+-------------------------------
+17️.Add .gitignore
+node_modules
+.terraform
+*.tfstate
+18️.Push to GitHub
+git init
+git add .
+git commit -m "Initial DevOps project"
+git remote add origin https://github.com/yourusername/trend-devops.git
+git push -u origin main
+PHASE 9: Jenkins CI/CD Pipeline
+============================
+19️.Install Jenkins Plugins
+-------------------------
+Git
+
+Docker
+
+Kubernetes
+
+Pipeline
+
+GitHub Integration
+
+20️.Create Jenkinsfile
+pipeline {
+    agent any
+    
+    stages {
+        stage('Clone') {
+            steps { git 'https://github.com/yourusername/trend-devops.git' }
+        }
+        stage('Docker Build') {
+            steps { sh 'docker build -t yourdockerhubusername/trend-app:latest .' }
+        }
+        stage('Push DockerHub') {
+            steps { sh 'docker push yourdockerhubusername/trend-app:latest' }
+        }
+        stage('Deploy to EKS') {
+            steps { sh 'kubectl apply -f k8s/' }
+        }
+    }
+}
+21️.Configure GitHub Webhook
+
+Settings → Webhooks → http://<Jenkins-IP>:8080/github-webhook/
+
+Enable auto-build on commit.
+
+✅ Optional Monitoring
+
+Use Prometheus + Grafana for EKS cluster & app health.
+
+Helm command:
+
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install prometheus prometheus-community/kube-prometheus-stack
+PHASE 10: Submission
+
+GitHub Repo with:
+
+React App
+
+Dockerfile
+
+Terraform files
+
+Kubernetes YAMLs
+
+Jenkinsfile
+
+README with screenshots and instructions
+
+LoadBalancer URL
+
+Screenshots of:
+
+Jenkins pipeline
+
+EKS nodes
+
+App running in browser
+-----------------------x-------------------------------
